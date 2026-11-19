@@ -1,6 +1,6 @@
 
 import { NextResponse } from "next/server";
-import { sql } from "@/lib/db";
+import pool from "@/lib/db";
 
 export async function PATCH(request: Request) {
   try {
@@ -18,21 +18,22 @@ export async function PATCH(request: Request) {
       );
     }
 
-    const result = await sql`
-      UPDATE menu_items
-      SET available = ${body.available}
-      WHERE id = ${id}
-      RETURNING *
-    `;
+    const result = await pool.query(
+      `UPDATE menu_items
+       SET available = $1
+       WHERE id = $2
+       RETURNING *`,
+      [body.available, id]
+    );
 
-    if (result.length === 0) {
+    if (result.rows.length === 0) {
       return NextResponse.json(
         { error: "Food item not found" },
         { status: 404 }
       );
     }
 
-    return NextResponse.json(result[0]);
+    return NextResponse.json(result.rows[0]);
 
   } catch (error) {
     console.error("Availability error:", error);
