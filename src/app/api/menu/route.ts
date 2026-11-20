@@ -1,6 +1,6 @@
 
-import pool from "@/lib/db";
 import { NextResponse } from "next/server";
+import pool from "@/lib/db";
 
 // GET: Display all menu items
 export async function GET() {
@@ -10,7 +10,6 @@ export async function GET() {
     );
 
     return NextResponse.json(result.rows);
-
   } catch (error) {
     console.error("GET ERROR:", error);
 
@@ -30,6 +29,7 @@ export async function POST(request: Request) {
     const description = String(body.description || "").trim();
     const price = Number(body.price);
 
+    // Validate input
     if (!name || !Number.isFinite(price) || price <= 0) {
       return NextResponse.json(
         { error: "Valid name and price are required" },
@@ -63,11 +63,10 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         message: "Food item added successfully!",
-        item: result.rows[0]
+        item: result.rows[0],
       },
       { status: 201 }
     );
-
   } catch (error) {
     console.error("POST ERROR:", error);
 
