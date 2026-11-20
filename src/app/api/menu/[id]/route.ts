@@ -33,10 +33,8 @@ export async function PUT(
       );
     }
 
-    if (
-      image_url &&
-      !/^https?:\/\/.+/i.test(image_url)
-    ) {
+    // Validate image URL
+    if (image_url && !/^https?:\/\/.+/i.test(image_url)) {
       return NextResponse.json(
         { error: "Please provide a valid image URL." },
         { status: 400 }
@@ -92,7 +90,6 @@ export async function PUT(
     );
   }
 }
-
 
 // DELETE: Delete food item
 export async function DELETE(
