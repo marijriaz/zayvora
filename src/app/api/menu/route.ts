@@ -1,77 +1,60 @@
+
 import { NextResponse } from "next/server";
 import pool from "@/lib/db";
+import { getAdminSession } from "@/lib/auth";
 
-// GET: Display all menu items
-export async function GET() {
+export async function PATCH(request: Request) {
   try {
-    const result = await pool.query(
-      "SELECT * FROM menu_items ORDER BY id DESC"
-    );
+    const session = await getAdminSession();
 
-    return NextResponse.json(result.rows);
-  } catch (error) {
-    console.error("GET ERROR:", error);
-
-    return NextResponse.json(
-      { error: "Failed to fetch menu" },
-      { status: 500 }
-    );
-  }
-}
-
-// POST: Add new menu item
-export async function POST(request: Request) {
-  try {
-    const body = await request.json();
-
-    const name = String(body.name || "").trim();
-    const description = String(body.description || "").trim();
-    const price = Number(body.price);
-
-    // Validate input
-    if (!name || !Number.isFinite(price) || price <= 0) {
+    if (!session) {
       return NextResponse.json(
-        { error: "Valid name and price are required" },
+        { error: "Unauthorized" },
+        { status: 401 }
+      );
+    }
+
+    const body = await request.json();
+    const id = Number(body.id);
+
+    if (
+      !Number.isInteger(id) ||
+      id <= 0 ||
+      typeof body.available !== "boolean"
+    ) {
+      return NextResponse.json(
+        { error: "Invalid availability details" },
         { status: 400 }
       );
     }
 
-    // Prevent duplicate dish names
-    const existing = await pool.query(
-      `SELECT id FROM menu_items
-       WHERE LOWER(TRIM(name)) = LOWER($1)`,
-      [name]
+    const result = await pool.query(
+      `UPDATE menu_items
+       SET available = $1
+       WHERE id = $2
+       RETURNING id, name, available`,
+      [body.available, id]
     );
 
-    if (existing.rows.length > 0) {
+    if (result.rows.length === 0) {
       return NextResponse.json(
-        { error: "This food item already exists!" },
-        { status: 409 }
+        { error: "Dish not found" },
+        { status: 404 }
       );
     }
 
-    // Save new food item
-    const result = await pool.query(
-      `INSERT INTO menu_items
-       (name, price, description)
-       VALUES ($1, $2, $3)
-       RETURNING *`,
-      [name, price, description]
-    );
+    return NextResponse.json({
+      success: true,
+      item: result.rows[0]
+    });
 
-    return NextResponse.json(
-      {
-        message: "Food item added successfully!",
-        item: result.rows[0],
-      },
-      { status: 201 }
-    );
   } catch (error) {
-    console.error("POST ERROR:", error);
+    console.error("Availability error:", error);
 
     return NextResponse.json(
-      { error: "Failed to add food item" },
+      { error: "Unable to update availability" },
       { status: 500 }
     );
   }
 }
+

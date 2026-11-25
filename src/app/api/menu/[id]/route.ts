@@ -1,41 +1,99 @@
+
 import { NextResponse } from "next/server";
 import pool from "@/lib/db";
+import { getAdminSession } from "@/lib/auth";
 
-// PUT: Update existing food item
-export async function PUT(
-  request: Request,
-  context: { params: Promise<{ id: string }> }
-) {
+type Context = {
+  params: Promise<{ id: string }>;
+};
+
+function validImageUrl(value: string): boolean {
+  if (!value) return true;
+
   try {
+    const url = new URL(value);
+    return ["http:", "https:"].includes(url.protocol);
+  } catch {
+    return false;
+  }
+}
+
+// ADMIN ONLY: Update food item
+export async function PUT(request: Request, context: Context) {
+  try {
+    const session = await getAdminSession();
+
+    if (!session) {
+      return NextResponse.json(
+        { error: "Unauthorized." },
+        { status: 401 }
+      );
+    }
+
     const { id } = await context.params;
     const itemId = Number(id);
 
     if (!Number.isInteger(itemId) || itemId <= 0) {
       return NextResponse.json(
-        { error: "Invalid food ID" },
+        { error: "Invalid food ID." },
         { status: 400 }
       );
     }
 
-    const body = await request.json();
+    const body: unknown = await request.json();
 
-    const name = String(body.name || "").trim();
-    const description = String(body.description || "").trim();
-    const price = Number(body.price);
-    const category = String(body.category || "").trim();
-    const image_url = String(body.image_url || "").trim();
+    if (
+      typeof body !== "object" ||
+      body === null ||
+      Array.isArray(body)
+    ) {
+      return NextResponse.json(
+        { error: "Invalid request body." },
+        { status: 400 }
+      );
+    }
 
-    if (!name || !Number.isFinite(price) || price <= 0) {
+    const data = body as Record<string, unknown>;
+
+    const name =
+      typeof data.name === "string" ? data.name.trim() : "";
+
+    const description =
+      typeof data.description === "string"
+        ? data.description.trim()
+        : "";
+
+    const category =
+      typeof data.category === "string"
+        ? data.category.trim()
+        : "";
+
+    const imageUrl =
+      typeof data.image_url === "string"
+        ? data.image_url.trim()
+        : "";
+
+    const price = Number(data.price);
+
+    if (
+      !name ||
+      name.length > 150 ||
+      !Number.isFinite(price) ||
+      price <= 0
+    ) {
       return NextResponse.json(
         { error: "Valid dish name and price are required." },
         { status: 400 }
       );
     }
 
-    // Validate image URL
-    if (image_url && !/^https?:\/\/.+/i.test(image_url)) {
+    if (
+      (data.image_url !== undefined &&
+        typeof data.image_url !== "string") ||
+      !validImageUrl(imageUrl)
+    ) {
       return NextResponse.json(
-        { error: "Please provide a valid image URL." },
+        { error: "Invalid image URL." },
         { status: 400 }
       );
     }
@@ -54,8 +112,8 @@ export async function PUT(
         description,
         price,
         category || null,
-        image_url || null,
-        itemId
+        imageUrl || null,
+        itemId,
       ]
     );
 
@@ -68,40 +126,48 @@ export async function PUT(
 
     return NextResponse.json({
       message: "Food item updated successfully!",
-      item: result.rows[0]
+      item: result.rows[0],
     });
+  } catch (error) {
+    const dbError = error as { code?: string };
 
-  } catch (error: any) {
-    console.error("UPDATE ERROR:", error);
-
-    if (error.code === "23505") {
+    if (dbError.code === "23505") {
       return NextResponse.json(
-        { error: "This dish name already exists. Choose another name." },
+        { error: "This dish name already exists." },
         { status: 409 }
       );
     }
 
+    console.error("MENU UPDATE ERROR:", error);
+
     return NextResponse.json(
-      {
-        error: error.message || "Failed to update food item."
-      },
+      { error: "Failed to update food item." },
       { status: 500 }
     );
   }
 }
 
-// DELETE: Delete food item
+// ADMIN ONLY: Delete food item
 export async function DELETE(
   request: Request,
-  context: { params: Promise<{ id: string }> }
+  context: Context
 ) {
   try {
+    const session = await getAdminSession();
+
+    if (!session) {
+      return NextResponse.json(
+        { error: "Unauthorized." },
+        { status: 401 }
+      );
+    }
+
     const { id } = await context.params;
     const itemId = Number(id);
 
     if (!Number.isInteger(itemId) || itemId <= 0) {
       return NextResponse.json(
-        { error: "Invalid food ID" },
+        { error: "Invalid food ID." },
         { status: 400 }
       );
     }
@@ -109,7 +175,7 @@ export async function DELETE(
     const result = await pool.query(
       `DELETE FROM menu_items
        WHERE id = $1
-       RETURNING *`,
+       RETURNING id`,
       [itemId]
     );
 
@@ -121,11 +187,10 @@ export async function DELETE(
     }
 
     return NextResponse.json({
-      message: "Food item deleted successfully!"
+      message: "Food item deleted successfully!",
     });
-
   } catch (error) {
-    console.error("DELETE ERROR:", error);
+    console.error("MENU DELETE ERROR:", error);
 
     return NextResponse.json(
       { error: "Failed to delete food item." },

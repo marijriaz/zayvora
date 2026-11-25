@@ -1,442 +1,1092 @@
+
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type FormEvent,
+  type ChangeEvent,
+} from "react";
 
-type MenuItem = {
+type Tab = "home" | "menu" | "about" | "reservation" | "contact";
+
+interface MenuItem {
   id: number;
   name: string;
   description: string | null;
   price: number | string;
   category: string | null;
   image_url: string | null;
-};
-
-const emptyForm = { name: "", description: "", price: "", category: "", image_url: "" };
-
-function formatPKR(value: number | string) {
-  return new Intl.NumberFormat("en-PK", {
-    style: "currency",
-    currency: "PKR",
-    maximumFractionDigits: 0,
-  }).format(Number(value));
+  available?: boolean;
 }
 
-// Default photos used when a dish has no image_url saved in Neon.
-const foodImages = {
-  burger: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=900&q=85",
-  pizza: "https://images.unsplash.com/photo-1571407970349-bc81e7e96d47?w=900&q=85",
-  sandwich: "https://images.unsplash.com/photo-1528735602780-2552fd46c7af?w=900&q=85",
-  cake: "https://images.unsplash.com/photo-1578985545062-69928b1d9587?w=900&q=85",
-  fries: "https://images.unsplash.com/photo-1573080496219-bb080dd4f877?w=900&q=85",
-  chicken: "https://images.unsplash.com/photo-1532550907401-a500c9a57435?w=900&q=85",
-  default: "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=900&q=85",
+const C = {
+  green: "#26382D",
+  dark: "#1C2921",
+  cream: "#F8F4EC",
+  white: "#FFFDF8",
+  gold: "#C6A46A",
+  brown: "#A85E3D",
+  muted: "#827A6E",
 };
 
-function getDishImage(item: MenuItem) {
-  if (item.image_url?.trim()) return item.image_url.trim();
-  const text = `${item.name} ${item.category || ""}`.toLowerCase();
-  if (text.includes("burger")) return foodImages.burger;
-  if (text.includes("pizza")) return foodImages.pizza;
-  if (text.includes("sandwich") || text.includes("sub")) return foodImages.sandwich;
-  if (text.includes("cake") || text.includes("dessert") || text.includes("brownie")) return foodImages.cake;
-  if (text.includes("fries") || text.includes("potato")) return foodImages.fries;
-  if (text.includes("chicken")) return foodImages.chicken;
-  return foodImages.default;
-}
+const emptyBooking = {
+  name: "",
+  phone: "",
+  email: "",
+  date: "",
+  time: "",
+  guests: "2",
+  requests: "",
+};
 
-export default function Home() {
-  const [items, setItems] = useState<MenuItem[]>([]);
-  const [form, setForm] = useState(emptyForm);
-  const [editingId, setEditingId] = useState<number | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [deletingId, setDeletingId] = useState<number | null>(null);
-  const [message, setMessage] = useState("");
-  const [messageType, setMessageType] = useState<"success" | "error" | "info">("info");
+const buttonPrimary: React.CSSProperties = {
+  background: C.brown,
+  color: "#fff",
+  border: "none",
+  borderRadius: "40px",
+  padding: "15px 28px",
+  fontWeight: 700,
+  cursor: "pointer",
+};
+
+const inputStyle: React.CSSProperties = {
+  width: "100%",
+  padding: "14px 15px",
+  border: "1px solid #DED5C7",
+  borderRadius: "7px",
+  background: "#fff",
+  color: C.dark,
+  fontSize: "14px",
+  outlineColor: C.gold,
+};
+
+const eyebrow: React.CSSProperties = {
+  color: C.brown,
+  fontSize: "12px",
+  fontWeight: 800,
+  letterSpacing: "4px",
+  textTransform: "uppercase",
+};
+
+const heading: React.CSSProperties = {
+  fontFamily: "Georgia, serif",
+  color: C.green,
+  fontSize: "clamp(34px, 5vw, 55px)",
+  fontWeight: 500,
+  lineHeight: 1.12,
+  margin: "16px 0",
+};
+
+export default function HomePage() {
+  const [activeTab, setActiveTab] = useState<Tab>("home");
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [menuLoading, setMenuLoading] = useState(true);
+  const [menuError, setMenuError] = useState("");
+  const [category, setCategory] = useState("All");
   const [search, setSearch] = useState("");
 
-  async function loadMenu() {
-    try {
-      const response = await fetch("/api/menu", { cache: "no-store" });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Could not load the menu.");
-      setItems(Array.isArray(data) ? data : []);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Could not load menu.");
-      setMessageType("error");
-    } finally {
-      setLoading(false);
-    }
-  }
+  const [booking, setBooking] = useState(emptyBooking);
+  const [bookingLoading, setBookingLoading] = useState(false);
+  const [bookingMessage, setBookingMessage] = useState("");
+  const [bookingError, setBookingError] = useState("");
 
+  // Load public menu from the existing NeonDB API
   useEffect(() => {
-    void loadMenu();
+    async function loadMenu() {
+      try {
+        const response = await fetch("/api/menu", {
+          cache: "no-store",
+        });
+
+        if (!response.ok) {
+          throw new Error("Unable to load the restaurant menu.");
+        }
+
+        const data: unknown = await response.json();
+
+        if (!Array.isArray(data)) {
+          throw new Error("Invalid menu response.");
+        }
+
+        setMenuItems(data as MenuItem[]);
+      } catch (error) {
+        setMenuError(
+          error instanceof Error ? error.message : "Unable to load menu."
+        );
+      } finally {
+        setMenuLoading(false);
+      }
+    }
+
+    loadMenu();
   }, []);
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  const categories = useMemo(() => {
+    const values = menuItems
+      .map((item) => item.category?.trim())
+      .filter((value): value is string => Boolean(value));
+
+    return ["All", ...Array.from(new Set(values))];
+  }, [menuItems]);
+
+  const filteredMenu = useMemo(() => {
+    return menuItems.filter((item) => {
+      const matchesCategory =
+        category === "All" || item.category === category;
+
+      const term = search.toLowerCase();
+
+      const matchesSearch =
+        item.name.toLowerCase().includes(term) ||
+        (item.description || "").toLowerCase().includes(term);
+
+      return (
+        matchesCategory &&
+        matchesSearch &&
+        item.available !== false
+      );
+    });
+  }, [menuItems, category, search]);
+
+  function navigate(tab: Tab) {
+    setActiveTab(tab);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function updateBooking(
+    event: ChangeEvent<
+      HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+    >
+  ) {
+    const { name, value } = event.target;
+
+    setBooking((previous) => ({
+      ...previous,
+      [name]: value,
+    }));
+  }
+
+  // Reservation is submitted to a server-side API.
+  // The API must validate the request and save it to NeonDB.
+  async function submitReservation(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const name = form.name.trim();
-    const description = form.description.trim();
-    const category = form.category.trim();
-    const image_url = form.image_url.trim();
-    const price = Number(form.price);
 
-    if (!name || !Number.isFinite(price) || price <= 0) {
-      setMessage("Enter a dish name and a price greater than zero.");
-      setMessageType("error");
-      return;
-    }
-
-    const duplicate = items.some(
-      (item) =>
-        item.name.trim().toLocaleLowerCase() === name.toLocaleLowerCase() &&
-        item.id !== editingId
-    );
-
-    if (duplicate) {
-      setMessage("This dish is already on the menu. Please choose a unique name.");
-      setMessageType("error");
-      return;
-    }
-
-    setSaving(true);
-    setMessage("");
+    setBookingLoading(true);
+    setBookingError("");
+    setBookingMessage("");
 
     try {
-      const response = await fetch(
-        editingId ? `/api/menu/${editingId}` : "/api/menu",
-        {
-          method: editingId ? "PUT" : "POST",
-          headers: { "Content-Type": "application/json" },
-          // Keep this payload aligned with the confirmed database columns:
-          // name, price, description.
-          body: JSON.stringify({ name, price, description, category, image_url }),
-        }
+      const response = await fetch("/api/reservations", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(booking),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.error || "Unable to submit your reservation."
+        );
+      }
+
+      setBookingMessage(
+        data.message || "Your reservation request has been received."
       );
 
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || "Could not save this dish.");
-
-      setMessage(editingId ? "Dish updated successfully." : "Dish added successfully.");
-      setMessageType("success");
-      setForm(emptyForm);
-      setEditingId(null);
-      await loadMenu();
+      setBooking(emptyBooking);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Something went wrong.");
-      setMessageType("error");
+      setBookingError(
+        error instanceof Error
+          ? error.message
+          : "Something went wrong. Please try again."
+      );
     } finally {
-      setSaving(false);
+      setBookingLoading(false);
     }
   }
 
-  function handleEdit(item: MenuItem) {
-    setEditingId(item.id);
-    setForm({
-      name: item.name,
-      description: item.description || "",
-      price: String(item.price),
-      category: item.category || "",
-      image_url: item.image_url || "",
-    });
-    setMessage("Editing this dish. Make your changes and save.");
-    setMessageType("info");
-    document.getElementById("manage-menu")?.scrollIntoView({ behavior: "smooth" });
-  }
-
-  async function handleDelete(id: number) {
-    if (!window.confirm("Are you sure you want to delete this dish?")) return;
-
-    setDeletingId(id);
-    setMessage("");
-
-    try {
-      const response = await fetch(`/api/menu/${id}`, { method: "DELETE" });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || "Could not delete this dish.");
-
-      if (editingId === id) {
-        setEditingId(null);
-        setForm(emptyForm);
-      }
-      setMessage("Dish deleted successfully.");
-      setMessageType("success");
-      await loadMenu();
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Delete failed.");
-      setMessageType("error");
-    } finally {
-      setDeletingId(null);
-    }
-  }
-
-  const visibleItems = useMemo(() => {
-    const query = search.trim().toLocaleLowerCase();
-    return [...items]
-      .filter((item) =>
-        !query ||
-        item.name.toLocaleLowerCase().includes(query) ||
-        (item.description || "").toLocaleLowerCase().includes(query)
-      )
-      .sort((a, b) => a.name.localeCompare(b.name));
-  }, [items, search]);
-
-  return (
-    <main className="min-h-screen bg-[#fffaf1] text-[#49382d]">
-      <header className="sticky top-0 z-30 border-b border-[#eee1ce] bg-[#fffaf1]/95 backdrop-blur">
-        <nav className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4 md:px-10">
-          <a href="#home" className="text-2xl font-black tracking-[0.18em] text-[#a85e40]">
-            ZAYVORA<span className="text-[#d4a85d]">.</span>
-          </a>
-          <div className="flex items-center gap-4 text-sm font-semibold text-[#806c5b] md:gap-8">
-            <a href="#home" className="hover:text-[#a85e40]">Home</a>
-            <a href="#menu" className="hover:text-[#a85e40]">Our Menu</a>
-            <a href="#story" className="hover:text-[#a85e40]">About Us</a>
-            <a href="#contact" className="hidden hover:text-[#a85e40] sm:inline">Contact</a>
-            <a href="#manage-menu" className="rounded-full bg-[#a85e40] px-4 py-2.5 text-white shadow-sm transition hover:bg-[#874a32]">Manage Menu</a>
-          </div>
-        </nav>
-      </header>
-
-      <section
-        id="home"
-        className="relative isolate flex min-h-[500px] items-center overflow-hidden bg-[#ead8bf] px-5 py-20"
+  function Footer() {
+    return (
+      <footer
         style={{
-          backgroundImage:
-            "linear-gradient(90deg, rgba(255,250,241,.96) 0%, rgba(255,250,241,.88) 48%, rgba(255,250,241,.22) 100%), url('https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=1800&q=85')",
-          backgroundPosition: "center",
-          backgroundSize: "cover",
+          background: C.dark,
+          color: "#EDE5D7",
+          padding: "55px 24px 25px",
         }}
       >
-        <div className="mx-auto w-full max-w-7xl">
-          <div className="max-w-2xl">
-            <p className="mb-5 text-xs font-extrabold tracking-[0.32em] text-[#a85e40] md:text-sm">
-              GOOD FOOD · BEAUTIFUL MOMENTS
+        <div
+          style={{
+            maxWidth: "1200px",
+            margin: "auto",
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))",
+            gap: "35px",
+          }}
+        >
+          <div>
+            <h2
+              style={{
+                color: "#E3C48E",
+                fontSize: "30px",
+                letterSpacing: "6px",
+              }}
+            >
+              ZAYVORA.
+            </h2>
+            <p style={{ color: "#C9C1B4", lineHeight: 1.8 }}>
+              Good food. Beautiful moments. Discover a dining experience
+              made to be remembered.
             </p>
-            <h1 className="text-5xl font-black leading-[1.08] text-[#49382d] md:text-7xl">
-              A taste beyond <span className="text-[#b8734f]">ordinary.</span>
-            </h1>
-            <p className="mt-6 max-w-xl text-base leading-8 text-[#776454] md:text-lg">
-              Welcome to Zayvora, where comforting favourites meet thoughtful preparation.
-              Explore our menu and discover something made to delight.
+          </div>
+
+          <div>
+            <h3 style={{ color: "#E3C48E", marginBottom: "15px" }}>
+              Explore
+            </h3>
+
+            {(
+              ["home", "menu", "about", "reservation", "contact"] as Tab[]
+            ).map((tab) => (
+              <button
+                key={tab}
+                onClick={() => navigate(tab)}
+                style={{
+                  display: "block",
+                  background: "none",
+                  border: "none",
+                  color: "#D7D0C4",
+                  padding: "7px 0",
+                  cursor: "pointer",
+                  textTransform: "capitalize",
+                }}
+              >
+                {tab === "menu" ? "Our Menu" : tab}
+              </button>
+            ))}
+          </div>
+
+          <div>
+            <h3 style={{ color: "#E3C48E", marginBottom: "15px" }}>
+              Visit Zayvora
+            </h3>
+            <p style={{ color: "#C9C1B4", lineHeight: 1.9 }}>
+              Restaurant & Dining
+              <br />
+              Contact us for location and opening hours.
+              <br />
+              We look forward to welcoming you.
             </p>
-            <div className="mt-9 flex flex-wrap gap-3">
-              <a href="#menu" className="rounded-full bg-[#a85e40] px-8 py-3.5 font-bold text-white shadow-lg transition hover:-translate-y-0.5 hover:bg-[#874a32]">
-                Explore the Menu
-              </a>
-              <a href="#manage-menu" className="rounded-full border border-[#cda98b] bg-white/80 px-8 py-3.5 font-bold text-[#80563f] transition hover:bg-white">
-                Add a Dish
-              </a>
-            </div>
-            <div className="mt-12 flex flex-wrap gap-x-9 gap-y-4 text-sm text-[#806c5b]">
-              <span>✦ Freshly prepared</span>
-              <span>✦ Made with care</span>
-              <span>✦ Prices in PKR</span>
-            </div>
           </div>
         </div>
-      </section>
 
-      <section className="mx-auto grid max-w-7xl gap-4 px-5 py-9 sm:grid-cols-3 md:px-10">
-        <div className="rounded-2xl border border-[#eee1ce] bg-white p-5 text-center shadow-sm">
-          <p className="text-3xl">🍽️</p>
-          <p className="mt-2 text-2xl font-black text-[#a85e40]">{items.length}</p>
-          <p className="text-sm text-[#806c5b]">Menu items</p>
+        <div
+          style={{
+            maxWidth: "1200px",
+            margin: "35px auto 0",
+            borderTop: "1px solid #475047",
+            paddingTop: "20px",
+            textAlign: "center",
+            color: "#AAA99F",
+            fontSize: "12px",
+          }}
+        >
+          © {new Date().getFullYear()} Zayvora Restaurant. All rights reserved.
         </div>
-        <div className="rounded-2xl border border-[#eee1ce] bg-white p-5 text-center shadow-sm">
-          <p className="text-3xl">🥘</p>
-          <p className="mt-2 text-lg font-extrabold text-[#a85e40]">Fresh flavours</p>
-          <p className="text-sm text-[#806c5b]">Prepared with care</p>
-        </div>
-        <div className="rounded-2xl border border-[#eee1ce] bg-white p-5 text-center shadow-sm">
-          <p className="text-3xl">₨</p>
-          <p className="mt-2 text-lg font-extrabold text-[#a85e40]">PKR only</p>
-          <p className="text-sm text-[#806c5b]">One clear currency</p>
-        </div>
-      </section>
+      </footer>
+    );
+  }
 
-      <section id="manage-menu" className="mx-auto max-w-5xl scroll-mt-24 px-5 py-14 md:py-20">
-        <div className="mb-9 text-center">
-          <p className="text-xs font-extrabold tracking-[0.3em] text-[#a85e40]">RESTAURANT MENU</p>
-          <h2 className="mt-3 text-3xl font-black text-[#49382d] md:text-4xl">
-            {editingId ? "Update your dish" : "Add a new dish"}
-          </h2>
-          <p className="mx-auto mt-3 max-w-xl leading-7 text-[#806c5b]">
-            Add or update dishes here. Your dish name, description and price are saved in your Neon database.
-          </p>
-        </div>
+  function MenuCards({ limit }: { limit?: number }) {
+    const displayed = limit
+      ? filteredMenu.slice(0, limit)
+      : filteredMenu;
 
-        <form onSubmit={handleSubmit} className="rounded-[28px] border border-[#eee1ce] bg-white p-6 shadow-[0_18px_55px_rgba(116,78,46,.09)] md:p-9">
-          <div className="grid gap-5 md:grid-cols-2">
-            <div>
-              <label htmlFor="dish-name" className="mb-2 block text-sm font-bold text-[#634b3b]">Dish name</label>
-              <input
-                id="dish-name"
-                required
-                maxLength={100}
-                value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
-                placeholder="e.g. Zayvora Royal Burger"
-                className="w-full rounded-xl border border-[#e6d8c6] bg-[#fffdf9] px-4 py-3.5 outline-none transition placeholder:text-[#b9a999] focus:border-[#bd805e] focus:ring-4 focus:ring-[#bd805e]/10"
+    if (menuLoading) {
+      return (
+        <p style={{ textAlign: "center", padding: "40px", color: C.muted }}>
+          Preparing our menu...
+        </p>
+      );
+    }
+
+    if (menuError) {
+      return (
+        <p style={{ textAlign: "center", padding: "35px", color: C.brown }}>
+          {menuError}
+        </p>
+      );
+    }
+
+    if (displayed.length === 0) {
+      return (
+        <p style={{ textAlign: "center", padding: "35px", color: C.muted }}>
+          No dishes found. Please check back soon.
+        </p>
+      );
+    }
+
+    return (
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit,minmax(245px,1fr))",
+          gap: "25px",
+        }}
+      >
+        {displayed.map((item) => (
+          <article
+            key={item.id}
+            style={{
+              background: C.white,
+              borderRadius: "12px",
+              overflow: "hidden",
+              border: "1px solid #EAE3D8",
+              boxShadow: "0 8px 25px rgba(40,35,25,0.05)",
+            }}
+          >
+            {item.image_url ? (
+              <img
+                src={item.image_url}
+                alt={item.name}
+                loading="lazy"
+                style={{
+                  width: "100%",
+                  height: "215px",
+                  objectFit: "cover",
+                }}
               />
-            </div>
-            <div>
-              <label htmlFor="dish-price" className="mb-2 block text-sm font-bold text-[#634b3b]">Price</label>
-              <div className="flex overflow-hidden rounded-xl border border-[#e6d8c6] bg-[#fffdf9] focus-within:border-[#bd805e] focus-within:ring-4 focus-within:ring-[#bd805e]/10">
-                <span className="flex items-center border-r border-[#e6d8c6] bg-[#f7efe4] px-4 text-sm font-bold text-[#986448]">PKR</span>
-                <input
-                  id="dish-price"
-                  required
-                  type="number"
-                  min="1"
-                  step="1"
-                  value={form.price}
-                  onChange={(e) => setForm({ ...form, price: e.target.value })}
-                  placeholder="850"
-                  className="w-full bg-transparent px-4 py-3.5 outline-none placeholder:text-[#b9a999]"
-                />
+            ) : (
+              <div
+                style={{
+                  height: "215px",
+                  background: "#EDE7DC",
+                  display: "grid",
+                  placeItems: "center",
+                  fontSize: "55px",
+                }}
+              >
+                🍽️
+              </div>
+            )}
+
+            <div style={{ padding: "20px" }}>
+              <p style={{ ...eyebrow, letterSpacing: "2px" }}>
+                {item.category || "Zayvora Special"}
+              </p>
+
+              <h3
+                style={{
+                  fontFamily: "Georgia,serif",
+                  color: C.green,
+                  fontSize: "23px",
+                  margin: "10px 0",
+                }}
+              >
+                {item.name}
+              </h3>
+
+              <p
+                style={{
+                  color: C.muted,
+                  fontSize: "13px",
+                  lineHeight: 1.7,
+                  minHeight: "42px",
+                }}
+              >
+                {item.description || "Freshly prepared with care."}
+              </p>
+
+              <div
+                style={{
+                  borderTop: "1px solid #E9E0D4",
+                  marginTop: "17px",
+                  paddingTop: "15px",
+                  color: C.brown,
+                  fontWeight: 800,
+                }}
+              >
+                Rs. {Number(item.price).toLocaleString("en-PK")}
               </div>
             </div>
-          </div>
-          <div className="mt-5">
-            <label htmlFor="dish-description" className="mb-2 block text-sm font-bold text-[#634b3b]">Dish description</label>
-            <textarea
-              id="dish-description"
-              rows={4}
-              maxLength={500}
-              value={form.description}
-              onChange={(e) => setForm({ ...form, description: e.target.value })}
-              placeholder="Describe the ingredients, flavour and what makes this dish special..."
-              className="w-full rounded-xl border border-[#e6d8c6] bg-[#fffdf9] px-4 py-3.5 outline-none transition placeholder:text-[#b9a999] focus:border-[#bd805e] focus:ring-4 focus:ring-[#bd805e]/10"
-            />
-            <p className="mt-1 text-right text-xs text-[#a18d7a]">{form.description.length}/500</p>
-          </div>
-          <div className="mt-5 grid gap-5 md:grid-cols-2">
-            <div>
-              <label htmlFor="dish-category" className="mb-2 block text-sm font-bold text-[#634b3b]">Category</label>
-              <input id="dish-category" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} placeholder="Burgers, Pizza, Desserts..." className="w-full rounded-xl border border-[#e6d8c6] bg-[#fffdf9] px-4 py-3.5 outline-none focus:border-[#bd805e]" />
-            </div>
-            <div>
-              <label htmlFor="dish-image" className="mb-2 block text-sm font-bold text-[#634b3b]">Dish image URL</label>
-              <input id="dish-image" type="url" value={form.image_url} onChange={(e) => setForm({ ...form, image_url: e.target.value })} placeholder="https://.../your-dish-photo.jpg" className="w-full rounded-xl border border-[#e6d8c6] bg-[#fffdf9] px-4 py-3.5 outline-none focus:border-[#bd805e]" />
-              <p className="mt-1 text-xs text-[#a18d7a]">Use a direct photo URL that matches this dish.</p>
-            </div>
-          </div>
-          {form.image_url && <div className="mt-4 overflow-hidden rounded-2xl border border-[#eee1ce] bg-[#faf4eb] p-3"><p className="mb-2 text-xs font-bold text-[#806c5b]">IMAGE PREVIEW</p><img src={form.image_url} alt="Dish preview" className="h-40 w-full rounded-xl object-cover" onError={(e) => { e.currentTarget.style.display = "none"; }} /></div>}
-          <div className="mt-7 flex flex-wrap gap-3">
-            <button type="submit" disabled={saving} className="rounded-full bg-[#a85e40] px-8 py-3.5 font-bold text-white shadow-md transition hover:-translate-y-0.5 hover:bg-[#874a32] disabled:cursor-not-allowed disabled:opacity-60">
-              {saving ? "Saving..." : editingId ? "Save Changes" : "+ Add Dish"}
-            </button>
-            {editingId && (
-              <button type="button" onClick={() => { setEditingId(null); setForm(emptyForm); setMessage(""); }} className="rounded-full border border-[#ddcbb7] px-7 py-3.5 font-bold text-[#80634d] transition hover:bg-[#faf3e9]">
-                Cancel
+          </article>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <main
+      style={{
+        background: C.cream,
+        color: C.dark,
+        minHeight: "100vh",
+        fontFamily: "Arial, sans-serif",
+      }}
+    >
+      {/* MAIN NAVIGATION */}
+      <header
+        style={{
+          background: C.white,
+          position: "sticky",
+          top: 0,
+          zIndex: 50,
+          boxShadow: "0 3px 15px rgba(0,0,0,0.05)",
+        }}
+      >
+        <div
+          style={{
+            maxWidth: "1400px",
+            margin: "auto",
+            padding: "15px 25px",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: "15px",
+            flexWrap: "wrap",
+          }}
+        >
+          <button
+            onClick={() => navigate("home")}
+            style={{
+              border: "none",
+              background: "none",
+              cursor: "pointer",
+              fontSize: "30px",
+              letterSpacing: "5px",
+              fontWeight: 900,
+              color: C.brown,
+            }}
+          >
+            ZAYVORA<span style={{ color: C.gold }}>.</span>
+          </button>
+
+          <nav
+            aria-label="Main navigation"
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              alignItems: "center",
+              gap: "8px",
+            }}
+          >
+            {(
+              [
+                ["home", "Home"],
+                ["menu", "Our Menu"],
+                ["about", "About Us"],
+                ["reservation", "Reservation"],
+                ["contact", "Contact"],
+              ] as [Tab, string][]
+            ).map(([tab, label]) => (
+              <button
+                key={tab}
+                onClick={() => navigate(tab)}
+                style={{
+                  border: "none",
+                  background:
+                    activeTab === tab ? "#F0E8DB" : "transparent",
+                  color: activeTab === tab ? C.brown : C.green,
+                  padding: "11px 13px",
+                  borderRadius: "25px",
+                  cursor: "pointer",
+                  fontWeight: 700,
+                  fontSize: "13px",
+                }}
+              >
+                {label}
               </button>
-            )}
-          </div>
-          {message && (
-            <p role="status" className={`mt-5 rounded-xl px-4 py-3 text-sm font-semibold ${
-              messageType === "success" ? "bg-[#edf6eb] text-[#376640]" :
-              messageType === "error" ? "bg-[#fff0eb] text-[#a34332]" :
-              "bg-[#f8f1e6] text-[#80613d]"
-            }`}>{message}</p>
-          )}
-          <p className="mt-4 text-xs leading-5 text-[#a18d7a]">
-            Prices are entered and displayed in Pakistani Rupees (PKR). Duplicate dish names are not allowed.
-          </p>
-        </form>
-      </section>
+            ))}
 
-      <section id="menu" className="bg-[#f6eee2] px-5 py-16 md:py-20">
-        <div className="mx-auto max-w-7xl">
-          <div className="mb-10 text-center">
-            <p className="text-xs font-extrabold tracking-[0.3em] text-[#a85e40]">MADE FOR YOUR CRAVINGS</p>
-            <h2 className="mt-3 text-3xl font-black text-[#49382d] md:text-5xl">Explore Our Menu</h2>
-            <p className="mt-3 text-[#806c5b]">Find your next favourite from the Zayvora kitchen.</p>
+            <a
+              href="/admin/login"
+              style={{
+                ...buttonPrimary,
+                display: "inline-block",
+                textDecoration: "none",
+                fontSize: "13px",
+                padding: "12px 20px",
+              }}
+            >
+              Admin Portal
+            </a>
+          </nav>
+        </div>
+      </header>
+
+      {/* HOME */}
+      {activeTab === "home" && (
+        <>
+          <section
+            style={{
+              minHeight: "650px",
+              display: "flex",
+              alignItems: "center",
+              backgroundImage:
+                "linear-gradient(90deg,rgba(248,244,236,.97) 0%,rgba(248,244,236,.86) 45%,rgba(248,244,236,.08) 100%),url('https://images.unsplash.com/photo-1414235077428-338989a2e8c0?auto=format&fit=crop&w=2000&q=85')",
+              backgroundSize: "cover",
+              backgroundPosition: "center",
+            }}
+          >
+            <div
+              style={{
+                maxWidth: "1200px",
+                width: "100%",
+                margin: "auto",
+                padding: "85px 25px",
+              }}
+            >
+              <p style={eyebrow}>GOOD FOOD · BEAUTIFUL MOMENTS</p>
+
+              <h1
+                style={{
+                  fontFamily: "Georgia,serif",
+                  fontSize: "clamp(48px,7vw,85px)",
+                  lineHeight: 1.08,
+                  color: C.dark,
+                  maxWidth: "760px",
+                  margin: "25px 0",
+                }}
+              >
+                A taste beyond
+                <br />
+                <span style={{ color: C.brown }}>ordinary.</span>
+              </h1>
+
+              <p
+                style={{
+                  color: "#64594D",
+                  fontSize: "18px",
+                  lineHeight: 1.9,
+                  maxWidth: "580px",
+                }}
+              >
+                Welcome to Zayvora, where comforting favourites meet
+                thoughtful preparation. Explore our menu and discover
+                something made to delight.
+              </p>
+
+              <div
+                style={{
+                  display: "flex",
+                  gap: "15px",
+                  flexWrap: "wrap",
+                  marginTop: "30px",
+                }}
+              >
+                <button
+                  onClick={() => navigate("menu")}
+                  style={buttonPrimary}
+                >
+                  Explore the Menu →
+                </button>
+
+                <button
+                  onClick={() => navigate("reservation")}
+                  style={{
+                    background: "transparent",
+                    color: C.green,
+                    border: "1px solid #B88B6A",
+                    borderRadius: "40px",
+                    padding: "15px 28px",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                  }}
+                >
+                  Reserve a Table
+                </button>
+              </div>
+
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: "25px",
+                  marginTop: "65px",
+                  color: C.muted,
+                  fontSize: "14px",
+                }}
+              >
+                <span>✦ Freshly prepared</span>
+                <span>✦ Made with care</span>
+                <span>✦ Prices in PKR</span>
+              </div>
+            </div>
+          </section>
+
+          <section style={{ maxWidth: "1200px", margin: "auto", padding: "85px 24px" }}>
+            <div style={{ textAlign: "center", marginBottom: "40px" }}>
+              <p style={eyebrow}>DISCOVER OUR FLAVOURS</p>
+              <h2 style={heading}>A few of our favourites</h2>
+              <p style={{ color: C.muted }}>
+                Carefully prepared dishes, made to bring people together.
+              </p>
+            </div>
+
+            <MenuCards limit={3} />
+
+            <div style={{ textAlign: "center", marginTop: "40px" }}>
+              <button
+                onClick={() => navigate("menu")}
+                style={buttonPrimary}
+              >
+                View Full Menu →
+              </button>
+            </div>
+          </section>
+
+          <section
+            style={{
+              background: C.green,
+              color: C.white,
+              padding: "75px 24px",
+              textAlign: "center",
+            }}
+          >
+            <p style={{ ...eyebrow, color: C.gold }}>YOUR TABLE AWAITS</p>
+            <h2
+              style={{
+                fontFamily: "Georgia,serif",
+                fontSize: "clamp(34px,5vw,52px)",
+                margin: "20px 0",
+                fontWeight: 500,
+              }}
+            >
+              Make room for something special.
+            </h2>
+            <p style={{ color: "#D8D8CD", marginBottom: "25px" }}>
+              Join us for a memorable dining experience.
+            </p>
+            <button
+              onClick={() => navigate("reservation")}
+              style={{
+                ...buttonPrimary,
+                background: C.gold,
+                color: C.dark,
+              }}
+            >
+              Book Your Table
+            </button>
+          </section>
+        </>
+      )}
+
+      {/* OUR MENU */}
+      {activeTab === "menu" && (
+        <section style={{ maxWidth: "1200px", margin: "auto", padding: "85px 24px" }}>
+          <div style={{ textAlign: "center", marginBottom: "45px" }}>
+            <p style={eyebrow}>MADE WITH PASSION</p>
+            <h1 style={heading}>Our Menu</h1>
+            <p style={{ color: C.muted }}>
+              Explore our selection of freshly prepared favourites.
+            </p>
           </div>
-          <div className="mx-auto mb-9 max-w-xl">
-            <input
-              aria-label="Search menu"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search dishes by name or description..."
-              className="w-full rounded-full border border-[#e4d5c1] bg-white px-6 py-3.5 text-[#49382d] shadow-sm outline-none placeholder:text-[#b9a999] focus:border-[#bd805e] focus:ring-4 focus:ring-[#bd805e]/10"
+
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search for your favourite dish..."
+            style={{
+              ...inputStyle,
+              maxWidth: "450px",
+              display: "block",
+              margin: "0 auto 25px",
+            }}
+          />
+
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              justifyContent: "center",
+              gap: "10px",
+              marginBottom: "40px",
+            }}
+          >
+            {categories.map((item) => (
+              <button
+                key={item}
+                onClick={() => setCategory(item)}
+                style={{
+                  padding: "10px 20px",
+                  borderRadius: "30px",
+                  border: "1px solid #D6C9B8",
+                  background: category === item ? C.green : "white",
+                  color: category === item ? "white" : C.green,
+                  cursor: "pointer",
+                }}
+              >
+                {item}
+              </button>
+            ))}
+          </div>
+
+          <MenuCards />
+        </section>
+      )}
+
+      {/* ABOUT US */}
+      {activeTab === "about" && (
+        <>
+          <section
+            style={{
+              maxWidth: "1200px",
+              margin: "auto",
+              padding: "85px 24px",
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit,minmax(280px,1fr))",
+              alignItems: "center",
+              gap: "50px",
+            }}
+          >
+            <div>
+              <p style={eyebrow}>THE ZAYVORA STORY</p>
+              <h1 style={heading}>
+                More than a meal.
+                <br />
+                A moment to remember.
+              </h1>
+              <p style={{ color: C.muted, lineHeight: 2 }}>
+                At Zayvora, we believe good food brings people together.
+                Our restaurant is a place to slow down, enjoy thoughtful
+                preparation and share beautiful moments around the table.
+              </p>
+              <p style={{ color: C.muted, lineHeight: 2 }}>
+                From comforting favourites to delightful flavours, we aim
+                to make every visit feel special.
+              </p>
+              <button
+                onClick={() => navigate("menu")}
+                style={buttonPrimary}
+              >
+                Discover Our Menu
+              </button>
+            </div>
+
+            <img
+              src="https://images.unsplash.com/photo-1414235077428-338989a2e8c0?auto=format&fit=crop&w=1000&q=85"
+              alt="Elegant restaurant dining"
+              style={{
+                width: "100%",
+                minHeight: "360px",
+                maxHeight: "500px",
+                objectFit: "cover",
+                borderRadius: "12px",
+              }}
             />
+          </section>
+
+          <section
+            style={{
+              background: "#EDE6DA",
+              padding: "70px 24px",
+              textAlign: "center",
+            }}
+          >
+            <p style={eyebrow}>OUR PROMISE</p>
+            <h2 style={heading}>Good food. Thoughtful hospitality.</h2>
+            <p style={{ color: C.muted, lineHeight: 1.9 }}>
+              Fresh preparation, welcoming service and memorable moments.
+            </p>
+          </section>
+        </>
+      )}
+
+      {/* RESERVATION */}
+      {activeTab === "reservation" && (
+        <section style={{ maxWidth: "1200px", margin: "auto", padding: "85px 24px" }}>
+          <div style={{ textAlign: "center", marginBottom: "40px" }}>
+            <p style={eyebrow}>PLAN YOUR VISIT</p>
+            <h1 style={heading}>Reserve Your Table</h1>
+            <p style={{ color: C.muted, lineHeight: 1.8 }}>
+              Tell us about your visit and send us a reservation request.
+            </p>
           </div>
 
-          {loading ? (
-            <p className="py-14 text-center text-[#806c5b]">Loading our menu...</p>
-          ) : visibleItems.length === 0 ? (
-            <div className="rounded-3xl border border-dashed border-[#d9c4aa] bg-white/80 px-6 py-16 text-center">
-              <div className="text-5xl">🍽️</div>
-              <p className="mt-4 text-lg font-bold text-[#634b3b]">{search ? "No matching dishes found." : "Our menu is waiting for its first dish."}</p>
-              <p className="mt-2 text-sm text-[#8b7765]">{search ? "Try another search." : "Use the form above to add your first dish."}</p>
-            </div>
-          ) : (
-            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              {visibleItems.map((item, index) => (
-                <article key={item.id} className="group overflow-hidden rounded-[26px] border border-[#eadcc9] bg-white shadow-[0_12px_35px_rgba(100,67,39,.07)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_18px_45px_rgba(100,67,39,.13)]">
-                  <div className="relative h-52 overflow-hidden bg-gradient-to-br from-[#f4e5d0] via-[#fbf3e8] to-[#ead5bc]">
-                    <img
-                      src={getDishImage(item)}
-                      alt={item.name}
-                      className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
-                      loading="lazy"
-                      onError={(event) => {
-                        event.currentTarget.onerror = null;
-                        event.currentTarget.src = "https://placehold.co/900x600/f6eee2/806c5b?text=Zayvora+Food";
-                      }}
-                    />
-                  </div>
-                  <div className="p-6">
-                    <div className="mb-2 text-xs font-bold uppercase tracking-wider text-[#b47755]">{item.category || "Zayvora Special"}</div>
-                    <div className="flex items-start justify-between gap-3">
-                      <h3 className="text-xl font-extrabold text-[#49382d]">{item.name}</h3>
-                      <span className="shrink-0 rounded-full bg-[#f8eddd] px-3 py-1.5 text-sm font-extrabold text-[#9a573b]">{formatPKR(item.price)}</span>
-                    </div>
-                    <p className="mt-3 min-h-14 text-sm leading-6 text-[#806c5b]">
-                      {item.description || "Prepared fresh with care by the Zayvora kitchen."}
-                    </p>
-                    <div className="mt-6 flex gap-3 border-t border-[#f0e7db] pt-4">
-                      <button type="button" onClick={() => handleEdit(item)} className="flex-1 rounded-full bg-[#f5ecdf] py-2.5 text-sm font-bold text-[#855035] transition hover:bg-[#ead9c3]">Edit</button>
-                      <button type="button" disabled={deletingId === item.id} onClick={() => handleDelete(item.id)} className="flex-1 rounded-full border border-[#e8c9bd] py-2.5 text-sm font-bold text-[#a34e3d] transition hover:bg-[#fff0eb] disabled:opacity-50">
-                        {deletingId === item.id ? "Deleting..." : "Delete"}
-                      </button>
-                    </div>
-                  </div>
-                </article>
-              ))}
-            </div>
-          )}
-        </div>
-      </section>
+          <div
+            style={{
+              maxWidth: "760px",
+              margin: "auto",
+              background: C.white,
+              padding: "clamp(20px,5vw,45px)",
+              borderRadius: "14px",
+              boxShadow: "0 10px 40px rgba(0,0,0,.06)",
+              border: "1px solid #E8DFD1",
+            }}
+          >
+            {bookingMessage && (
+              <div
+                role="status"
+                style={{
+                  padding: "15px",
+                  background: "#E4F2E6",
+                  color: "#245B31",
+                  borderRadius: "7px",
+                  marginBottom: "20px",
+                }}
+              >
+                {bookingMessage}
+              </div>
+            )}
 
-      <section id="story" className="scroll-mt-24 bg-[#fffaf1] px-5 py-16 text-center md:py-20">
-        <p className="text-xs font-extrabold tracking-[0.3em] text-[#a85e40]">A LITTLE ABOUT US</p>
-        <h2 className="mt-3 text-3xl font-black text-[#49382d] md:text-4xl">More Than Just a Meal</h2>
-        <p className="mx-auto mt-5 max-w-3xl text-base leading-8 text-[#806c5b]">
-          At Zayvora, we believe food brings people together. Our menu celebrates satisfying flavours,
-          thoughtful preparation and the simple joy of sharing a delicious meal. Whether you are choosing
-          a familiar favourite or trying something new, we want every visit to feel welcoming.
-        </p>
-        <p className="mx-auto mt-4 max-w-3xl text-sm leading-7 text-[#806c5b]">Our aim is to make choosing a meal simple and enjoyable. Browse the dishes, check clear prices in Pakistani Rupees, and explore descriptions before deciding what you would like to try. Our menu is updated as dishes are added, edited or removed.</p>
-        <div className="mx-auto mt-9 grid max-w-4xl gap-4 text-left sm:grid-cols-3">
-          <div className="rounded-2xl border border-[#eee1ce] bg-white p-5"><span className="text-2xl">🌿</span><h3 className="mt-3 font-bold">Thoughtful ingredients</h3><p className="mt-2 text-sm leading-6 text-[#806c5b]">Every dish is presented with care and attention to flavour.</p></div>
-          <div className="rounded-2xl border border-[#eee1ce] bg-white p-5"><span className="text-2xl">👩‍🍳</span><h3 className="mt-3 font-bold">Made with care</h3><p className="mt-2 text-sm leading-6 text-[#806c5b]">We aim to make every menu choice feel special.</p></div>
-          <div className="rounded-2xl border border-[#eee1ce] bg-white p-5"><span className="text-2xl">❤️</span><h3 className="mt-3 font-bold">Warm hospitality</h3><p className="mt-2 text-sm leading-6 text-[#806c5b]">Good food is even better when it is shared.</p></div>
-        </div>
-      </section>
+            {bookingError && (
+              <div
+                role="alert"
+                style={{
+                  padding: "15px",
+                  background: "#FCE8E5",
+                  color: "#9A3026",
+                  borderRadius: "7px",
+                  marginBottom: "20px",
+                }}
+              >
+                {bookingError}
+              </div>
+            )}
 
-      <footer id="contact" className="scroll-mt-24 bg-[#efe2d0] px-5 py-10 text-center">
-        <p className="text-2xl font-black tracking-[0.18em] text-[#9a4f32]">ZAYVORA</p>
-        <p className="mt-2 text-sm text-[#806c5b]">A Taste Beyond Ordinary.</p>
-        <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-[#806c5b]">Explore our menu, discover your favourites and enjoy a warm, welcoming food experience. All listed prices are in Pakistani Rupees (PKR).</p>
-        <div className="mt-5 flex justify-center gap-6 text-sm font-semibold text-[#806c5b]">
-          <a href="#home" className="hover:text-[#a85e40]">Home</a>
-          <a href="#menu" className="hover:text-[#a85e40]">Menu</a>
-          <a href="#manage-menu" className="hover:text-[#a85e40]">Manage Menu</a>
-        </div>
-        <p className="mt-6 text-xs text-[#9b8978]">© 2026 Zayvora Restaurant. All rights reserved.</p>
-      </footer>
+            <form onSubmit={submitReservation}>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))",
+                  gap: "20px",
+                }}
+              >
+                <label>
+                  <span style={{ display: "block", marginBottom: "8px", fontSize: "13px", fontWeight: 700 }}>
+                    Full Name *
+                  </span>
+                  <input
+                    name="name"
+                    value={booking.name}
+                    onChange={updateBooking}
+                    placeholder="Your full name"
+                    required
+                    maxLength={100}
+                    autoComplete="name"
+                    style={inputStyle}
+                  />
+                </label>
+
+                <label>
+                  <span style={{ display: "block", marginBottom: "8px", fontSize: "13px", fontWeight: 700 }}>
+                    Phone Number *
+                  </span>
+                  <input
+                    name="phone"
+                    value={booking.phone}
+                    onChange={updateBooking}
+                    placeholder="Your phone number"
+                    required
+                    maxLength={30}
+                    autoComplete="tel"
+                    style={inputStyle}
+                  />
+                </label>
+
+                <label>
+                  <span style={{ display: "block", marginBottom: "8px", fontSize: "13px", fontWeight: 700 }}>
+                    Email Address
+                  </span>
+                  <input
+                    type="email"
+                    name="email"
+                    value={booking.email}
+                    onChange={updateBooking}
+                    placeholder="Your email"
+                    maxLength={150}
+                    autoComplete="email"
+                    style={inputStyle}
+                  />
+                </label>
+
+                <label>
+                  <span style={{ display: "block", marginBottom: "8px", fontSize: "13px", fontWeight: 700 }}>
+                    Number of Guests *
+                  </span>
+                  <select
+                    name="guests"
+                    value={booking.guests}
+                    onChange={updateBooking}
+                    required
+                    style={inputStyle}
+                  >
+                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((n) => (
+                      <option key={n} value={n}>
+                        {n} {n === 1 ? "Guest" : "Guests"}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label>
+                  <span style={{ display: "block", marginBottom: "8px", fontSize: "13px", fontWeight: 700 }}>
+                    Reservation Date *
+                  </span>
+                  <input
+                    type="date"
+                    name="date"
+                    value={booking.date}
+                    onChange={updateBooking}
+                    min={new Date().toLocaleDateString("en-CA")}
+                    required
+                    style={inputStyle}
+                  />
+                </label>
+
+                <label>
+                  <span style={{ display: "block", marginBottom: "8px", fontSize: "13px", fontWeight: 700 }}>
+                    Preferred Time *
+                  </span>
+                  <select
+                    name="time"
+                    value={booking.time}
+                    onChange={updateBooking}
+                    required
+                    style={inputStyle}
+                  >
+                    <option value="">Select a time</option>
+                    {[
+                      "12:00", "12:30", "13:00", "13:30",
+                      "14:00", "17:00", "17:30", "18:00",
+                      "18:30", "19:00", "19:30", "20:00",
+                      "20:30", "21:00",
+                    ].map((time) => (
+                      <option key={time} value={time}>
+                        {time}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+
+              <label style={{ display: "block", marginTop: "20px" }}>
+                <span style={{ display: "block", marginBottom: "8px", fontSize: "13px", fontWeight: 700 }}>
+                  Special Requests
+                </span>
+                <textarea
+                  name="requests"
+                  value={booking.requests}
+                  onChange={updateBooking}
+                  rows={4}
+                  maxLength={1000}
+                  placeholder="Any special requests or occasions?"
+                  style={{ ...inputStyle, resize: "vertical" }}
+                />
+              </label>
+
+              <button
+                type="submit"
+                disabled={bookingLoading}
+                style={{
+                  ...buttonPrimary,
+                  width: "100%",
+                  marginTop: "25px",
+                  opacity: bookingLoading ? 0.6 : 1,
+                }}
+              >
+                {bookingLoading
+                  ? "Submitting..."
+                  : "Request Reservation →"}
+              </button>
+
+              <p
+                style={{
+                  textAlign: "center",
+                  color: C.muted,
+                  fontSize: "12px",
+                  marginTop: "15px",
+                  lineHeight: 1.7,
+                }}
+              >
+                Your request is subject to confirmation by the restaurant.
+                A submitted request does not guarantee a confirmed table.
+              </p>
+            </form>
+          </div>
+        </section>
+      )}
+
+      {/* CONTACT */}
+      {activeTab === "contact" && (
+        <section style={{ maxWidth: "1200px", margin: "auto", padding: "85px 24px" }}>
+          <div style={{ textAlign: "center", marginBottom: "45px" }}>
+            <p style={eyebrow}>WE WOULD LOVE TO HEAR FROM YOU</p>
+            <h1 style={heading}>Get in Touch</h1>
+            <p style={{ color: C.muted, lineHeight: 1.8 }}>
+              Questions about our menu or planning a visit? Contact Zayvora.
+            </p>
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))",
+              gap: "20px",
+            }}
+          >
+            {[
+              {
+                icon: "📍",
+                title: "Our Location",
+                description: "Contact us for restaurant address and directions.",
+              },
+              {
+                icon: "☎",
+                title: "Call Us",
+                description: "Please use your restaurant contact number here.",
+              },
+              {
+                icon: "✉",
+                title: "Email Us",
+                description: "Get in touch for enquiries and reservations.",
+              },
+            ].map((item) => (
+              <div
+                key={item.title}
+                style={{
+                  background: C.white,
+                  border: "1px solid #E8DFD1",
+                  borderRadius: "12px",
+                  padding: "35px 25px",
+                  textAlign: "center",
+                }}
+              >
+                <div style={{ fontSize: "35px" }}>{item.icon}</div>
+                <h3
+                  style={{
+                    fontFamily: "Georgia,serif",
+                    color: C.green,
+                    fontSize: "24px",
+                    margin: "15px 0",
+                  }}
+                >
+                  {item.title}
+                </h3>
+                <p style={{ color: C.muted, lineHeight: 1.8 }}>
+                  {item.description}
+                </p>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ textAlign: "center", marginTop: "40px" }}>
+            <button
+              onClick={() => navigate("reservation")}
+              style={buttonPrimary}
+            >
+              Make a Reservation
+            </button>
+          </div>
+        </section>
+      )}
+
+      <Footer />
     </main>
   );
 }
