@@ -50,14 +50,14 @@ export default function AdminLoginPage() {
   }
 
   return (
-    <main className="min-h-screen flex items-center justify-center bg-[#101c17] px-4 py-10">
+    <main className="min-h-screen flex items-center justify-center bg-[#fff8f0] px-4 py-10">
 
       <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-2xl sm:p-10">
 
         {/* Logo / Brand */}
         <div className="mb-8 text-center">
 
-          <h1 className="text-4xl font-bold tracking-wide text-[#173c2d]">
+          <h1 className="text-4xl font-bold tracking-wide text-[#292522]">
             ZAYVORA
           </h1>
 
@@ -65,7 +65,7 @@ export default function AdminLoginPage() {
             RESTAURANT & DINING
           </p>
 
-          <div className="mx-auto mt-6 h-1 w-16 rounded-full bg-[#c39a55]" />
+          <div className="mx-auto mt-6 h-1 w-16 rounded-full bg-[#e87532]" />
 
         </div>
 
@@ -105,7 +105,7 @@ export default function AdminLoginPage() {
               required
               maxLength={256}
               disabled={loading}
-              className="w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-800 outline-none transition focus:border-[#173c2d] focus:ring-2 focus:ring-[#173c2d]/20 disabled:bg-gray-100"
+              className="w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-800 outline-none transition focus:border-[#e87532] focus:ring-2 focus:ring-[#e87532]/20 disabled:bg-gray-100"
             />
 
           </div>
@@ -132,7 +132,7 @@ export default function AdminLoginPage() {
                 required
                 maxLength={1024}
                 disabled={loading}
-                className="w-full rounded-lg border border-gray-300 px-4 py-3 pr-14 text-gray-800 outline-none transition focus:border-[#173c2d] focus:ring-2 focus:ring-[#173c2d]/20 disabled:bg-gray-100"
+                className="w-full rounded-lg border border-gray-300 px-4 py-3 pr-14 text-gray-800 outline-none transition focus:border-[#e87532] focus:ring-2 focus:ring-[#e87532]/20 disabled:bg-gray-100"
               />
 
               <button
@@ -140,7 +140,7 @@ export default function AdminLoginPage() {
                 onClick={() => setShowPassword(!showPassword)}
                 aria-label={showPassword ? "Hide password" : "Show password"}
                 aria-pressed={showPassword}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-sm font-medium text-[#173c2d] hover:text-[#c39a55]"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-sm font-medium text-[#c85c23] hover:text-[#e87532]"
               >
                 {showPassword ? "Hide" : "Show"}
               </button>
@@ -163,7 +163,7 @@ export default function AdminLoginPage() {
           <button
             type="submit"
             disabled={loading || !username.trim() || !password}
-            className="w-full rounded-lg bg-[#173c2d] py-3.5 font-semibold text-white transition hover:bg-[#24543f] disabled:cursor-not-allowed disabled:opacity-60"
+            className="w-full rounded-lg bg-[#e87532] py-3.5 font-semibold text-white transition hover:bg-[#c85c23] disabled:cursor-not-allowed disabled:opacity-60"
           >
             {loading ? "Signing in..." : "Sign In"}
           </button>

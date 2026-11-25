@@ -2,6 +2,9 @@
 import { NextResponse } from "next/server";
 import pool from "@/lib/db";
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 export async function POST(request: Request) {
   try {
     const body: unknown = await request.json();
@@ -19,14 +22,9 @@ export async function POST(request: Request) {
 
     const data = body as Record<string, unknown>;
 
-    const name =
-      typeof data.name === "string" ? data.name.trim() : "";
-
-    const phone =
-      typeof data.phone === "string" ? data.phone.trim() : "";
-
-    const email =
-      typeof data.email === "string" ? data.email.trim() : "";
+    const name = typeof data.name === "string" ? data.name.trim() : "";
+    const phone = typeof data.phone === "string" ? data.phone.trim() : "";
+    const email = typeof data.email === "string" ? data.email.trim() : "";
 
     const date =
       typeof data.date === "string" ? data.date : "";
@@ -47,6 +45,7 @@ export async function POST(request: Request) {
       name.length > 100 ||
       !phone ||
       phone.length > 30 ||
+      !email ||
       email.length > 150 ||
       requests.length > 1000
     ) {
@@ -68,11 +67,13 @@ export async function POST(request: Request) {
     }
 
     // Validate date
+    const parsedDate = /^\d{4}-\d{2}-\d{2}$/.test(date)
+      ? new Date(`${date}T00:00:00.000Z`)
+      : null;
     if (
-      !/^\d{4}-\d{2}-\d{2}$/.test(date) ||
-      new Date(`${date}T00:00:00.000Z`)
-        .toISOString()
-        .slice(0, 10) !== date
+      !parsedDate ||
+      Number.isNaN(parsedDate.getTime()) ||
+      parsedDate.toISOString().slice(0, 10) !== date
     ) {
       return NextResponse.json(
         { error: "Invalid reservation date." },
