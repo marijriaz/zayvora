@@ -13,6 +13,18 @@ export interface AdminSession {
   expiresAt: number;
 }
 
+// Read and validate administrator username
+function getAdminUsername(): string {
+  const username = process.env.ADMIN_USERNAME?.trim();
+
+  if (!username) {
+    throw new Error("ADMIN_USERNAME is missing.");
+  }
+
+  return username;
+}
+
+// Read and validate session secret
 function getSessionSecret(): string {
   const secret = process.env.SESSION_SECRET;
 
@@ -23,21 +35,28 @@ function getSessionSecret(): string {
   return secret;
 }
 
+// Generate HMAC-SHA256 signature
 function signPayload(payload: string): string {
   return createHmac("sha256", getSessionSecret())
     .update(payload)
     .digest("base64url");
 }
 
+// Create signed administrator session
 export function createSession(username: string): string {
-  if (!username || username !== process.env.ADMIN_USERNAME) {
+  const adminUsername = getAdminUsername();
+
+  if (
+    typeof username !== "string" ||
+    username.trim() !== adminUsername
+  ) {
     throw new Error("Invalid administrator username.");
   }
 
   const now = Math.floor(Date.now() / 1000);
 
   const session: AdminSession = {
-    username,
+    username: adminUsername,
     issuedAt: now,
     expiresAt: now + SESSION_MAX_AGE,
   };
@@ -46,18 +65,29 @@ export function createSession(username: string): string {
     JSON.stringify(session)
   ).toString("base64url");
 
-  return `${payload}.${signPayload(payload)}`;
+  const signature = signPayload(payload);
+
+  return `${payload}.${signature}`;
 }
 
-export function verifySession(token: string): AdminSession | null {
+// Verify signed session token
+export function verifySession(
+  token: string
+): AdminSession | null {
   try {
-    if (typeof token !== "string" || token.length > 4096) {
+    if (
+      typeof token !== "string" ||
+      token.length === 0 ||
+      token.length > 4096
+    ) {
       return null;
     }
 
     const parts = token.split(".");
 
-    if (parts.length !== 2) return null;
+    if (parts.length !== 2) {
+      return null;
+    }
 
     const [payload, suppliedSignature] = parts;
 
@@ -70,12 +100,14 @@ export function verifySession(token: string): AdminSession | null {
       return null;
     }
 
+    // Validate canonical Base64URL payload
     const decodedBuffer = Buffer.from(payload, "base64url");
 
     if (decodedBuffer.toString("base64url") !== payload) {
       return null;
     }
 
+    // Verify signature
     const expectedSignature = Buffer.from(
       signPayload(payload),
       "base64url"
@@ -87,13 +119,17 @@ export function verifySession(token: string): AdminSession | null {
     );
 
     if (
+      actualSignature.toString("base64url") !== suppliedSignature ||
       actualSignature.length !== expectedSignature.length ||
       !timingSafeEqual(expectedSignature, actualSignature)
     ) {
       return null;
     }
 
-    const parsed: unknown = JSON.parse(decodedBuffer.toString("utf8"));
+    // Decode session payload
+    const parsed: unknown = JSON.parse(
+      decodedBuffer.toString("utf8")
+    );
 
     if (
       typeof parsed !== "object" ||
@@ -105,10 +141,11 @@ export function verifySession(token: string): AdminSession | null {
 
     const data = parsed as Record<string, unknown>;
 
+    const adminUsername = getAdminUsername();
+
     if (
       typeof data.username !== "string" ||
-      !process.env.ADMIN_USERNAME ||
-      data.username !== process.env.ADMIN_USERNAME ||
+      data.username !== adminUsername ||
       typeof data.issuedAt !== "number" ||
       typeof data.expiresAt !== "number" ||
       !Number.isSafeInteger(data.issuedAt) ||
@@ -119,6 +156,7 @@ export function verifySession(token: string): AdminSession | null {
 
     const now = Math.floor(Date.now() / 1000);
 
+    // Validate session expiration
     if (
       data.issuedAt <= 0 ||
       data.issuedAt > now + 60 ||
@@ -133,25 +171,33 @@ export function verifySession(token: string): AdminSession | null {
       issuedAt: data.issuedAt,
       expiresAt: data.expiresAt,
     };
+
   } catch {
     return null;
   }
 }
 
+// Read administrator session from HTTP-only cookie
 export async function getAdminSession(): Promise<AdminSession | null> {
   try {
     const cookieStore = await cookies();
 
-    const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+    const token = cookieStore.get(
+      SESSION_COOKIE_NAME
+    )?.value;
 
-    if (!token) return null;
+    if (!token) {
+      return null;
+    }
 
     return verifySession(token);
+
   } catch {
     return null;
   }
 }
 
+// Require administrator authentication
 export async function requireAdmin(): Promise<AdminSession> {
   const session = await getAdminSession();
 
