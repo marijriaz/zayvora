@@ -1,6 +1,6 @@
 
 import { NextResponse } from "next/server";
-import pool from "@/lib/db";
+import pool, { getSafeDatabaseError } from "@/lib/db";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -32,21 +32,32 @@ export async function POST(request: Request) {
     const time =
       typeof data.time === "string" ? data.time : "";
 
-    const guests = Number(data.guests);
+    const guests =
+      typeof data.guests === "string" || typeof data.guests === "number"
+        ? Number(data.guests)
+        : Number.NaN;
 
     const requests =
-      typeof data.requests === "string"
-        ? data.requests.trim()
-        : "";
+      data.requests === undefined
+        ? ""
+        : typeof data.requests === "string"
+          ? data.requests.trim()
+          : null;
+    const phoneDigits = phone.replace(/\D/g, "").length;
 
-    // Validate customer information
     if (
       !name ||
+      name.length < 2 ||
       name.length > 100 ||
+      !/\p{L}/u.test(name) ||
       !phone ||
       phone.length > 30 ||
+      !/^\+?[0-9().\s-]+$/.test(phone) ||
+      phoneDigits < 7 ||
+      phoneDigits > 15 ||
       !email ||
       email.length > 150 ||
+      requests === null ||
       requests.length > 1000
     ) {
       return NextResponse.json(
@@ -55,11 +66,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // Validate optional email
-    if (
-      email &&
-      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
-    ) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return NextResponse.json(
         { error: "Please provide a valid email address." },
         { status: 400 }
@@ -77,6 +84,15 @@ export async function POST(request: Request) {
     ) {
       return NextResponse.json(
         { error: "Invalid reservation date." },
+        { status: 400 }
+      );
+    }
+    const todayInPakistan = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Karachi",
+    }).format(new Date());
+    if (date < todayInPakistan) {
+      return NextResponse.json(
+        { error: "Reservation date cannot be in the past." },
         { status: 400 }
       );
     }
@@ -101,7 +117,17 @@ export async function POST(request: Request) {
       );
     }
 
-    // Save reservation in NeonDB
+    if (!process.env.DATABASE_URL?.trim()) {
+      console.error("RESERVATION CONFIG ERROR: DATABASE_URL is missing or empty.");
+      return NextResponse.json(
+        {
+          error: "The reservation service is not configured.",
+          code: "DATABASE_URL_MISSING",
+        },
+        { status: 503 }
+      );
+    }
+
     const result = await pool.query(
       `INSERT INTO reservations
        (
@@ -126,6 +152,10 @@ export async function POST(request: Request) {
       ]
     );
 
+    if (!result.rows[0]) {
+      throw new Error("Reservation insert returned no row.");
+    }
+
     return NextResponse.json(
       {
         success: true,
@@ -142,10 +172,14 @@ export async function POST(request: Request) {
       );
     }
 
-    console.error("RESERVATION ERROR:", error);
+    const databaseError = getSafeDatabaseError(error);
+    console.error("RESERVATION ERROR:", databaseError);
 
     return NextResponse.json(
-      { error: "Unable to submit reservation. Please try again." },
+      {
+        error: "Unable to submit reservation. Please try again.",
+        code: databaseError.code,
+      },
       { status: 500 }
     );
   }

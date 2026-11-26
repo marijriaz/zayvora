@@ -50,13 +50,29 @@ export async function POST(request: Request) {
       );
     }
 
-    const expectedUsername = process.env.ADMIN_USERNAME;
-    const expectedPassword = process.env.ADMIN_PASSWORD;
+    const expectedUsername = process.env.ADMIN_USERNAME ?? "";
+    const expectedPassword = process.env.ADMIN_PASSWORD ?? "";
+    const missingConfiguration = [
+      !expectedUsername.trim() ? "ADMIN_USERNAME" : null,
+      !expectedPassword ? "ADMIN_PASSWORD" : null,
+      !process.env.SESSION_SECRET ||
+      Buffer.byteLength(process.env.SESSION_SECRET, "utf8") < 32
+        ? "SESSION_SECRET"
+        : null,
+    ].filter((name): name is string => name !== null);
 
-    if (!expectedUsername || !expectedPassword) {
+    if (missingConfiguration.length > 0) {
+      console.error("AUTH CONFIG ERROR:", {
+        missingEnvironmentVariables: missingConfiguration,
+      });
       return NextResponse.json(
-        { success: false, message: "Authentication unavailable." },
-        { status: 500 }
+        {
+          success: false,
+          message: "Authentication unavailable.",
+          code: "AUTH_CONFIG_MISSING",
+          missingEnvironmentVariables: missingConfiguration,
+        },
+        { status: 503 }
       );
     }
 
@@ -101,7 +117,12 @@ export async function POST(request: Request) {
       );
     }
 
-    console.error("LOGIN ERROR:", error);
+    console.error(
+      "LOGIN ERROR:",
+      error instanceof Error
+        ? { name: error.name, message: error.message }
+        : { message: "Unknown login error." },
+    );
 
     return NextResponse.json(
       { success: false, message: "Internal server error." },

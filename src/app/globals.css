@@ -814,10 +814,55 @@ a {
   font-size: 20px;
 }
 
+
 .site-footer {
-  padding-block: 29px;
-  background: #292522;
-  color: #f9f0e8;
+  background: #E87532 !important;
+  color: #FFFFFF;
+  width: 100%;
+  padding: 35px 0;
+}
+
+.site-footer .footer-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 24px;
+}
+
+.site-footer a,
+.site-footer p,
+.site-footer small {
+  color: #FFFFFF !important;
+}
+
+.site-footer .brand {
+  font-size: 28px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.site-footer .brand span {
+  color: #FFE0CC;
+}
+
+.site-footer .brand small {
+  display: block;
+  font-size: 10px;
+  letter-spacing: 3px;
+  margin-top: 8px;
+}
+
+.site-footer a:hover {
+  color: #FFE0CC !important;
+  transition: 0.3s ease;
+}
+
+@media (max-width: 768px) {
+  .site-footer .footer-inner {
+    flex-direction: column;
+    text-align: center;
+  }
 }
 
 .footer-inner {

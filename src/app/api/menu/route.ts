@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { PoolClient } from "pg";
-import pool from "@/lib/db";
+import pool, { getSafeDatabaseError } from "@/lib/db";
 import { getAdminSession } from "@/lib/auth";
 
 export const runtime = "nodejs";
@@ -21,6 +21,17 @@ function validImageUrl(value: string): boolean {
 }
 
 export async function GET() {
+  if (!process.env.DATABASE_URL?.trim()) {
+    console.error("MENU LOAD CONFIG ERROR: DATABASE_URL is missing or empty.");
+    return NextResponse.json(
+      {
+        error: "The menu service is not configured.",
+        code: "DATABASE_URL_MISSING",
+      },
+      { status: 503 },
+    );
+  }
+
   try {
     const result = await pool.query(
       `SELECT id, name, description, price, category, image_url, available
@@ -31,9 +42,10 @@ export async function GET() {
       headers: { "Cache-Control": "no-store" },
     });
   } catch (error) {
-    console.error("MENU LOAD ERROR:", error);
+    const databaseError = getSafeDatabaseError(error);
+    console.error("MENU LOAD ERROR:", databaseError);
     return NextResponse.json(
-      { error: "Failed to load menu items." },
+      { error: "Failed to load menu items.", code: databaseError.code },
       { status: 500 },
     );
   }

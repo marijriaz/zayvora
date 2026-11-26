@@ -229,7 +229,7 @@ export default function HomePage() {
           </div>
           <div className="hero-note"><span>✦</span> Made with care, served with warmth</div>
         </div>
-        <div className="hero-caption">GOOD FOOD. GOOD COMPANY.</div>
+        <div className="hero-caption">GOOD FOOD. GOOD Resturant.</div>
       </section>
 
       <section className="highlights page-width" aria-label="Restaurant highlights">
@@ -297,7 +297,7 @@ export default function HomePage() {
             <p className="eyebrow">YOUR TABLE IS WAITING</p>
             <h2>Reserve your table for<br /><em>something lovely.</em></h2>
             <p>Tell us a little about your visit. Our team will be in touch to confirm your reservation.</p>
-            <div className="reservation-detail"><span>✦</span><div><strong>Good company starts here</strong><small>Plan a quiet dinner, a celebration, or just because.</small></div></div>
+            <div className="reservation-detail"><span>✦</span><div><strong>Good Resturant starts here</strong><small>Plan a quiet dinner, a celebration, or just because.</small></div></div>
           </div>
           <form className="reservation-form" onSubmit={submitReservation}>
             <h3>Request a reservation</h3>
@@ -308,7 +308,7 @@ export default function HomePage() {
               <label>Email address<input name="email" type="email" value={booking.email} onChange={updateBooking} placeholder="you@example.com" autoComplete="email" maxLength={150} required /></label>
               <label>Phone number<input name="phone" type="tel" value={booking.phone} onChange={updateBooking} placeholder="Your phone number" autoComplete="tel" maxLength={30} required /></label>
               <label>Guests<select name="guests" value={booking.guests} onChange={updateBooking} required>{Array.from({ length: 12 }, (_, index) => index + 1).map((count) => <option key={count} value={count}>{count} {count === 1 ? "guest" : "guests"}</option>)}</select></label>
-              <label>Date<input name="date" type="date" value={booking.date} onChange={updateBooking} min={new Date().toISOString().slice(0, 10)} required /></label>
+              <label>Date<input name="date" type="date" value={booking.date} onChange={updateBooking} min={new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Karachi" }).format(new Date())} required /></label>
               <label>Time<select name="time" value={booking.time} onChange={updateBooking} required><option value="">Choose a time</option>{["12:00", "12:30", "13:00", "13:30", "14:00", "17:00", "17:30", "18:00", "18:30", "19:00", "19:30", "20:00", "20:30", "21:00", "22:00", "23:00"].map((time) => <option value={time} key={time}>{time}</option>)}</select></label>
             </div>
             <label className="full-field">Special requests<textarea name="requests" value={booking.requests} onChange={updateBooking} rows={3} maxLength={1000} placeholder="Celebration, seating preferences, or anything we should know…" /></label>
